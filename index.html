@@ -141,8 +141,8 @@ input,textarea,select{-webkit-user-select:text;user-select:text}
     <button class="btn primary" style="width:100%" type="submit">Save statement</button>
    </form>
   </div>
-  <div class="card"><div class="section-head"><h2>Share statement photo</h2><span class="pill">Image</span></div><p class="hint">Create a shareable picture of all members’ balances or one member’s statement.</p>
-   <div class="field"><label for="shareMember">Choose statement</label><select id="shareMember"><option value="all">All members · total balance</option></select></div>
+  <div class="card"><div class="section-head"><h2>Share statement photo</h2><span class="pill">Image</span></div><p class="hint">Create a shareable picture with balances plus every transaction (date, reason, amount) for all members or one member.</p>
+   <div class="field"><label for="shareMember">Choose statement</label><select id="shareMember"><option value="all">All members · all transactions</option></select></div>
    <div class="btnrow"><button class="btn secondary" id="previewBtn" type="button">Preview photo</button><button class="btn primary" id="shareBtn" type="button">Share photo</button></div>
   </div>
  </section>
@@ -228,7 +228,7 @@ input,textarea,select{-webkit-user-select:text;user-select:text}
   const all=names();
   $('memberOptions').innerHTML=all.map(n=>`<option value="${esc(n)}"></option>`).join('');
   const previous=$('shareMember').value||'all';
-  $('shareMember').innerHTML='<option value="all">All members · total balance</option>'+all.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  $('shareMember').innerHTML='<option value="all">All members · all transactions</option>'+all.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
   if([...$('shareMember').options].some(o=>o.value===previous))$('shareMember').value=previous;
   $('memberCount').textContent=`${all.length} member${all.length===1?'':'s'}`;
   $('memberList').className=all.length?'':'empty';
@@ -284,16 +284,38 @@ input,textarea,select{-webkit-user-select:text;user-select:text}
  try{setTheme(localStorage.getItem('ms-dark')==='1')}catch(e){}
  $('themeBtn').addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudReady)loadCloud();});
+ function wrapLines(ctx,text,maxWidth){const words=String(text).split(' '),lines=[];let line='';for(const w of words){const t=line?line+' '+w:w;if(ctx.measureText(t).width>maxWidth&&line){lines.push(line);line=w;}else line=t;}if(line)lines.push(line);return lines;}
+ function fitText(ctx,text,maxWidth){text=String(text);if(ctx.measureText(text).width<=maxWidth)return text;while(text.length>1&&ctx.measureText(text+'…').width>maxWidth)text=text.slice(0,-1);return text+'…';}
  function drawStatement(){
-  const canvas=$('shareCanvas'),ctx=canvas.getContext('2d'),selected=$('shareMember').value,all=names(),isAll=selected==='all',list=isAll?all:[selected],rows=list.map(n=>({name:n,balance:balance(n),count:state.entries.filter(e=>e.name.toLowerCase()===n.toLowerCase()).length}));
-  const width=900,pad=58;let height=360+rows.length*90;if(!isAll){const es=state.entries.filter(e=>e.name.toLowerCase()===selected.toLowerCase()).sort((a,b)=>a.date.localeCompare(b.date));height+=es.length*64+60;}height=Math.max(760,Math.min(height,5000));canvas.width=width;canvas.height=height;
+  const canvas=$('shareCanvas'),ctx=canvas.getContext('2d'),selected=$('shareMember').value,all=names(),isAll=selected==='all',list=isAll?all:[selected];
+  const rows=list.map(n=>({name:n,balance:balance(n),count:state.entries.filter(e=>e.name.toLowerCase()===n.toLowerCase()).length}));
+  const width=900,pad=58,detailW=width-pad*2-220,MAXH=15000;
+  const es=state.entries.filter(e=>isAll||e.name.toLowerCase()===selected.toLowerCase()).sort((a,b)=>b.date.localeCompare(a.date)||b.created-a.created);
+  const lbl=e=>e.type==='given'?'Given':'Received';
+  const titleOf=e=>isAll?e.date+' · '+e.name:e.date+' · '+lbl(e);
+  const detailOf=e=>isAll?lbl(e)+' · '+(e.reason||'No reason added'):(e.reason||'No reason added');
+  ctx.font='16px system-ui';
+  const items=es.map(e=>{const lines=wrapLines(ctx,detailOf(e),detailW);return {e,lines,h:64+(lines.length-1)*22};});
+  const top=483+rows.length*90,room=MAXH-top-130;let used=0,shown=0;
+  for(const it of items){if(used+it.h>room)break;used+=it.h;shown++;}
+  const hidden=items.length-shown,body=items.length?used+(hidden?50:0):60,height=Math.max(760,top+body+70);
+  canvas.width=width;canvas.height=height;
   ctx.fillStyle='#f3f7f3';ctx.fillRect(0,0,width,height);ctx.fillStyle='#102d24';ctx.fillRect(0,0,width,245);
-  ctx.fillStyle='#bdebd6';ctx.font='700 22px system-ui';ctx.fillText('MONEY STATEMENT',pad,62);ctx.fillStyle='#ffffff';ctx.font='800 42px system-ui';wrapText(ctx,isAll?'All members balance':selected,pad,125,width-pad*2,50);ctx.fillStyle='#c8ded3';ctx.font='20px system-ui';ctx.fillText('Generated '+today(),pad,205);
+  ctx.fillStyle='#bdebd6';ctx.font='700 22px system-ui';ctx.fillText('MONEY STATEMENT',pad,62);ctx.fillStyle='#ffffff';ctx.font='800 42px system-ui';wrapText(ctx,isAll?'All members statement':selected,pad,125,width-pad*2,50);ctx.fillStyle='#c8ded3';ctx.font='20px system-ui';ctx.fillText('Generated '+today(),pad,205);
   const total=rows.reduce((s,r)=>s+r.balance,0);let y=295;ctx.fillStyle='#61776d';ctx.font='600 18px system-ui';ctx.fillText(isAll?'TOTAL OUTSTANDING':'MEMBER BALANCE',pad,y);ctx.fillStyle='#176b52';ctx.font='800 44px system-ui';ctx.fillText(money(total),pad,y+58);y+=105;
   ctx.fillStyle='#ffffff';roundRect(ctx,pad,y,width-pad*2,rows.length*90+24,22);y+=28;
   rows.forEach(r=>{ctx.fillStyle='#176b52';ctx.beginPath();ctx.arc(pad+27,y+19,18,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 17px system-ui';ctx.fillText(r.name.trim().slice(0,1).toUpperCase(),pad+21,y+25);ctx.fillStyle='#172b26';ctx.font='700 23px system-ui';ctx.fillText(r.name,pad+60,y+16);ctx.fillStyle='#718178';ctx.font='16px system-ui';ctx.fillText(`${r.count} transaction(s)`,pad+60,y+42);ctx.fillStyle='#176b52';ctx.font='700 23px system-ui';ctx.textAlign='right';ctx.fillText(money(r.balance),width-pad-22,y+26);ctx.textAlign='left';y+=90;});
   y+=30;
-  if(!isAll){ctx.fillStyle='#172b26';ctx.font='700 24px system-ui';ctx.fillText('TRANSACTIONS',pad,y);y+=25;const es=state.entries.filter(e=>e.name.toLowerCase()===selected.toLowerCase()).sort((a,b)=>b.date.localeCompare(a.date));if(!es.length){ctx.fillStyle='#718178';ctx.font='18px system-ui';ctx.fillText('No transactions recorded.',pad,y+25);y+=60;}es.forEach(e=>{ctx.fillStyle='#172b26';ctx.font='600 18px system-ui';ctx.fillText(e.date+' · '+(e.type==='given'?'Given':'Received'),pad,y+23);ctx.fillStyle='#718178';ctx.font='16px system-ui';wrapText(ctx,e.reason||'No reason added',pad,y+48,width-pad*2-220,22);ctx.fillStyle=e.type==='given'?'#176b52':'#a33b3b';ctx.font='700 19px system-ui';ctx.textAlign='right';ctx.fillText((e.type==='given'?'+':'−')+money(e.amount),width-pad,y+26);ctx.textAlign='left';y+=64;});}
+  ctx.fillStyle='#172b26';ctx.font='700 24px system-ui';ctx.fillText('TRANSACTIONS'+(items.length?' ('+items.length+')':''),pad,y);y+=25;
+  if(!items.length){ctx.fillStyle='#718178';ctx.font='18px system-ui';ctx.fillText('No transactions recorded.',pad,y+25);y+=60;}
+  items.slice(0,shown).forEach(({e,lines,h})=>{
+   ctx.fillStyle='#172b26';ctx.font='600 18px system-ui';ctx.fillText(fitText(ctx,titleOf(e),width-pad*2-200),pad,y+23);
+   ctx.fillStyle='#718178';ctx.font='16px system-ui';lines.forEach((l,i)=>ctx.fillText(l,pad,y+48+i*22));
+   ctx.fillStyle=e.type==='given'?'#176b52':'#a33b3b';ctx.font='700 19px system-ui';ctx.textAlign='right';ctx.fillText((e.type==='given'?'+':'−')+money(e.amount),width-pad,y+26);ctx.textAlign='left';
+   ctx.fillStyle='#e0e8e2';ctx.fillRect(pad,y+h-6,width-pad*2,1);
+   y+=h;
+  });
+  if(hidden){ctx.fillStyle='#718178';ctx.font='16px system-ui';ctx.fillText('+ '+hidden+' older transaction(s) not shown. Use Export CSV for the full list.',pad,y+24);}
   ctx.fillStyle='#8a9b91';ctx.font='16px system-ui';ctx.fillText('Made with Money Statement',pad,height-28);
  }
  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fill();}
