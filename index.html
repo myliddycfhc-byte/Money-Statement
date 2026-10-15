@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+SUPABASE SQL SETUP
+------------------
+create table if not exists public.money_members (
+  name text primary key,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.money_entries (
+  id uuid primary key,
+  name text not null references public.money_members(name) on update cascade,
+  date date not null,
+  type text not null check (type in ('given','received')),
+  amount numeric(12,2) not null check (amount > 0),
+  reason text not null default '',
+  created bigint not null
+);
+
+alter table public.money_members enable row level security;
+alter table public.money_entries enable row level security;
+
+drop policy if exists "anon read members" on public.money_members;
+drop policy if exists "anon insert members" on public.money_members;
+drop policy if exists "anon read entries" on public.money_entries;
+drop policy if exists "anon insert entries" on public.money_entries;
+drop policy if exists "anon delete entries" on public.money_entries;
+
+create policy "anon read members" on public.money_members for select to anon using (true);
+create policy "anon insert members" on public.money_members for insert to anon with check (true);
+create policy "anon read entries" on public.money_entries for select to anon using (true);
+create policy "anon insert entries" on public.money_entries for insert to anon with check (true);
+create policy "anon delete entries" on public.money_entries for delete to anon using (true);
+-->
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10231f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Money">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Money Statement</title>
+<style>
+:root{--bg:#f3f6f3;--card:#fff;--ink:#172b26;--muted:#6b7d76;--line:#e0e8e2;--accent:#176b52;--accent2:#dff3e9;--danger:#b53b3b;--shadow:0 10px 28px rgba(25,58,45,.08)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:linear-gradient(135deg,#10231f,#176b52);color:white;padding:22px 18px 28px;border-radius:0 0 26px 26px}
+.topline{display:flex;align-items:center;justify-content:space-between;gap:12px}.brand{font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.78}.theme-btn{border:1px solid #ffffff55;background:#ffffff15;color:white;border-radius:999px;padding:8px 12px;font-size:13px}
+h1{font-size:27px;line-height:1.15;margin:12px 0 6px;letter-spacing:-.04em}.subtitle{color:#d0e6dc;margin:0;font-size:13px}
+.wrap{max-width:760px;margin:auto;padding:16px 14px 100px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-10px}
+.stat{background:var(--card);padding:16px;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.stat small{color:var(--muted);display:block;font-size:12px}.stat strong{display:block;font-size:22px;letter-spacing:-.03em;margin-top:5px;overflow-wrap:anywhere}.stat.total{grid-column:1/-1;background:var(--accent2);border-color:transparent}.stat.total strong{font-size:28px;color:var(--accent)}
+.tabs{display:flex;gap:7px;margin:18px 0 14px;background:#e6ede8;padding:5px;border-radius:13px}.tab{flex:1;border:0;border-radius:10px;background:transparent;color:var(--muted);padding:10px 5px;font-weight:650}.tab.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px #173b2810}
+.panel{display:none}.panel.active{display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:17px;margin-bottom:13px;box-shadow:var(--shadow)}h2{font-size:17px;margin:0 0 13px;letter-spacing:-.02em}.hint{font-size:12px;color:var(--muted);margin:-7px 0 14px}
+label{display:block;font-size:12px;color:var(--muted);font-weight:650;margin:0 0 6px}input,textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 13px;outline:none}input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px #176b5218}textarea{min-height:76px;resize:vertical}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{margin-bottom:13px}.date-row{display:flex;gap:8px;align-items:center}.date-row input{min-width:0}.mini{white-space:nowrap;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px;font-size:12px}
+.btn{border:0;border-radius:13px;padding:13px 15px;font:inherit;font-weight:750;cursor:pointer}.primary{background:var(--accent);color:white}.secondary{background:var(--accent2);color:var(--accent)}.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line)}.danger{color:var(--danger);background:#fff0f0}.btnrow{display:flex;gap:8px;flex-wrap:wrap}.btnrow .btn{flex:1}.member-row,.entry{display:flex;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}.member-row:last-child,.entry:last-child{border-bottom:0}.avatar{width:42px;height:42px;flex:none;border-radius:14px;display:grid;place-items:center;background:var(--accent2);color:var(--accent);font-weight:800}.item-main{flex:1;min-width:0}.item-main strong{display:block;overflow-wrap:anywhere}.item-main small{display:block;color:var(--muted);font-size:12px;margin-top:3px}.money{font-weight:800;white-space:nowrap}.empty{text-align:center;color:var(--muted);padding:25px 8px;font-size:13px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.section-head h2{margin:0}.pill{font-size:11px;background:var(--accent2);color:var(--accent);padding:5px 8px;border-radius:999px;font-weight:750}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:8px 0 20px}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#172b26;color:white;padding:11px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:13px;display:none;z-index:9;max-width:90vw}
+.modal{display:none;position:fixed;inset:0;background:#081b15a8;z-index:10;align-items:flex-end;justify-content:center;padding:14px}.modal.open{display:flex}.modal-inner{background:var(--card);color:var(--ink);width:100%;max-width:520px;border-radius:22px;padding:18px;max-height:90vh;overflow:auto}.modal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.close{border:0;background:var(--bg);color:var(--ink);border-radius:50%;width:35px;height:35px;font-size:20px}
+#shareCanvas{width:100%;border-radius:14px;border:1px solid var(--line);background:white}.dark{--bg:#0e1714;--card:#17231f;--ink:#edf7f1;--muted:#a0b3a9;--line:#2c4037;--accent:#64d5a8;--accent2:#203d31;--shadow:0 10px 28px #0002}.dark .tabs{background:#1a2923}.dark .mini,.dark .ghost{background:#1d2b25}.dark .danger{background:#3a2222}.dark header{background:linear-gradient(135deg,#08110e,#123e30)}
+@media(min-width:600px){.wrap{padding:22px 20px 80px}.grid{grid-template-columns:1fr 1fr}.card{padding:20px}header{padding:26px calc((100% - 720px)/2) 32px}h1{font-size:32px}}
+
+/* ---- Phone comfort ---- */
+html{-webkit-text-size-adjust:100%}
+button,select,.tab{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+input,textarea,select{font-size:16px;min-height:48px}
+textarea{min-height:84px}
+.btn{min-height:50px}
+.mini{min-height:44px;padding:10px 14px}
+.theme-btn{min-height:40px;white-space:nowrap}
+.close{width:44px;height:44px}
+.topline{align-items:flex-start}
+.brand{line-height:1.5;min-width:0}
+.entry-side{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#dbStatus{display:inline-block;background:#ffffff1f;border-radius:999px;padding:1px 8px;text-transform:none;letter-spacing:0}
+.tab{min-height:46px}
+@media(max-width:599px){
+ header{padding:calc(14px + env(safe-area-inset-top)) 16px 26px}
+ h1{font-size:25px}
+ .wrap{padding:14px 12px calc(100px + env(safe-area-inset-bottom))}
+ .grid{grid-template-columns:1fr;gap:0}
+ .stat{padding:14px}.stat strong{font-size:19px}.stat.total strong{font-size:25px}
+ .card{padding:16px;border-radius:18px}
+ .tabs{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));margin:0;z-index:8;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 26px #0003;border-radius:18px}
+ .tab{font-size:14px;border-radius:13px}
+ .tab.active{background:var(--accent2);color:var(--accent)}
+ .toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+ .modal{padding:0}
+ .modal-inner{max-width:none;border-radius:22px 22px 0 0;max-height:92vh;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+ .money{font-size:14px}
+ .avatar{width:38px;height:38px;border-radius:12px}
+ footer{padding-bottom:10px}
+}
+@media(max-width:360px){.btnrow .btn{flex-basis:100%}}
+
+/* ---- App feel (phone only) ---- */
+html,body{overscroll-behavior-y:contain}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;min-height:100vh;min-height:100dvh}
+input,textarea,select{-webkit-user-select:text;user-select:text}
+.wrap{max-width:560px}
+.top-actions{display:flex;gap:8px;flex:none}
+.refresh-btn{border:1px solid #ffffff55;background:#ffffff15;color:white;border-radius:999px;width:40px;height:40px;font-size:18px;line-height:1}
+.refresh-btn.spin{animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.offline-bar{display:none;background:#fff4d6;color:#6b4e00;border:1px solid #f0dc9b;border-radius:14px;padding:10px 12px;font-size:13px;margin:14px 0 0}
+.dark .offline-bar{background:#3a3217;color:#f3dd96;border-color:#5a4d20}
+.offline-bar.show{display:block}
+@media(min-width:600px){header{padding:26px 20px 32px}.topline,header h1,header .subtitle{max-width:520px;margin-left:auto;margin-right:auto}}
+</style>
+</head>
+<body>
+<header>
+ <div class="topline"><div class="brand">Personal finance • Ledger · <span id="dbStatus">Supabase connecting…</span></div><div class="top-actions"><button class="refresh-btn" id="refreshBtn" type="button" aria-label="Refresh">↻</button><button class="theme-btn" id="themeBtn" type="button">☾ Dark</button></div></div>
+ <h1>Money Statement</h1><p class="subtitle">Track money given, received, and each member’s balance.</p>
+</header>
+<main class="wrap">
+ <div class="offline-bar" id="offlineBar">Offline — showing your last saved data. Adding or deleting needs internet.</div>
+ <section class="summary" style="margin-top:14px">
+  <div class="stat total"><small>All members · total outstanding</small><strong id="grandTotal">Rs 0.00</strong></div>
+  <div class="stat"><small>Total given</small><strong id="givenTotal">Rs 0.00</strong></div>
+  <div class="stat"><small>Total received</small><strong id="receivedTotal">Rs 0.00</strong></div>
+ </section>
+ <nav class="tabs" aria-label="Main sections">
+  <button class="tab active" data-tab="record">＋ Record</button><button class="tab" data-tab="members">Members</button><button class="tab" data-tab="history">History</button>
+ </nav>
+ <section class="panel active" id="record">
+  <div class="card">
+   <h2>Add money statement</h2><p class="hint">Record money you give or money returned to you.</p>
+   <form id="entryForm">
+    <div class="field"><label for="memberName">Member name</label><input id="memberName" list="memberOptions" placeholder="e.g. Fred" autocomplete="off" required><datalist id="memberOptions"></datalist></div>
+    <div class="grid">
+     <div class="field"><label for="entryDate">Date</label><div class="date-row"><input id="entryDate" type="date" required><button class="mini" id="todayBtn" type="button">Today</button></div></div>
+     <div class="field"><label for="entryType">Transaction</label><select id="entryType"><option value="given">Money given (+ owed)</option><option value="received">Money received (− owed)</option></select></div>
+    </div>
+    <div class="field"><label for="amount">Amount (Rs)</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" required></div>
+    <div class="field" id="reasonField"><label for="reason">Reason / details</label><textarea id="reason" maxlength="240" placeholder="What was the money for? (optional)"></textarea></div>
+    <button class="btn primary" style="width:100%" type="submit">Save statement</button>
+   </form>
+  </div>
+  <div class="card"><div class="section-head"><h2>Share statement photo</h2><span class="pill">Image</span></div><p class="hint">Create a shareable picture of all members’ balances or one member’s statement.</p>
+   <div class="field"><label for="shareMember">Choose statement</label><select id="shareMember"><option value="all">All members · total balance</option></select></div>
+   <div class="btnrow"><button class="btn secondary" id="previewBtn" type="button">Preview photo</button><button class="btn primary" id="shareBtn" type="button">Share photo</button></div>
+  </div>
+ </section>
+ <section class="panel" id="members">
+  <div class="card"><h2>Add a member</h2><form id="memberForm"><div class="field"><label for="newMember">Member name</label><input id="newMember" placeholder="Enter full name" required maxlength="70"></div><button class="btn primary" type="submit" style="width:100%">Add member</button></form></div>
+  <div class="card"><div class="section-head"><h2>All members</h2><span class="pill" id="memberCount">0 members</span></div><div id="memberList" class="empty">No members yet. Add a member or save a statement.</div></div>
+  <div class="card"><div class="section-head"><h2>Database connection</h2><span class="pill" id="dbPill">Supabase</span></div>
+   <p class="hint" id="dbMsg">Checking…</p>
+   <div class="field"><label for="sbUrl">Project URL</label><input id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+   <div class="field"><label for="sbKey">Anon public key</label><input id="sbKey" placeholder="eyJ… or sb_publishable_…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+   <div class="btnrow"><button class="btn primary" id="sbSave" type="button">Save &amp; test</button><button class="btn secondary" id="sbSql" type="button">Copy SQL setup</button></div>
+  </div>
+ </section>
+ <section class="panel" id="history">
+  <div class="card"><div class="section-head"><h2>Transaction history</h2><button class="mini" id="exportBtn" type="button">Export CSV</button></div><div id="historyList" class="empty">No transactions saved yet.</div></div>
+ </section>
+ <footer>Records are stored in Supabase. Keep RLS enabled and export a backup regularly.</footer>
+</main>
+<div class="modal" id="shareModal" role="dialog" aria-modal="true" aria-label="Statement photo preview"><div class="modal-inner"><div class="modal-top"><h2 style="margin:0">Statement photo</h2><button class="close" id="closeModal" aria-label="Close">×</button></div><canvas id="shareCanvas" width="900" height="1200"></canvas><div class="btnrow" style="margin-top:12px"><button class="btn secondary" id="downloadBtn" type="button">Save photo</button><button class="btn primary" id="modalShareBtn" type="button">Share image</button></div></div></div>
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+  // Supabase configuration
+  const DEFAULT_URL = 'https://gshbakpqgeuuzywtrpxk.supabase.co';
+  const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzaGJha3BxZ2V1dXp5d3RycHhrIiwicm9sZSI6ImFub24ifQ.dvG4uQ6u3tCcGarGbGy-GX1S6NvtzPdhJN8WaAB8u9I';
+  function getCfg(){try{const c=JSON.parse(localStorage.getItem('ms-sb-config')||'null');if(c&&c.url&&c.key)return c;}catch(e){}return {url:DEFAULT_URL,key:DEFAULT_KEY};}
+  let supabase = null;
+  function loadScript(src){return new Promise((res,rej)=>{const t=document.createElement('script');t.src=src;t.onload=res;t.onerror=()=>rej(new Error('Could not load Supabase library'));document.head.appendChild(t);});}
+  async function initClient(){
+    if(!window.supabase){try{await loadScript('https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js');}catch(e){}}
+    if(!window.supabase) throw new Error('Supabase library not loaded (check internet connection)');
+    const c=getCfg();
+    supabase=window.supabase.createClient(c.url.trim().replace(/\/+$/,''),c.key.trim());
+  }
+  let state = {members:[], entries:[]};
+  let cloudReady = false;
+
+  function showDbError(err){
+    const el=$('dbMsg'); if(!el)return;
+    if(!err){el.className='hint';el.style.color='';el.textContent='Connected. Your data is syncing with Supabase.';return;}
+    const m=(err&&(err.message||err.error_description))||String(err);
+    const code=err&&err.code?` (code ${err.code})`:'';
+    let tip='';
+    if(/invalid api key|jwt|apikey|unauthorized|401/i.test(m)) tip=' → The anon key is wrong. Paste the real "anon public" key from Supabase → Project Settings → API.';
+    else if(/relation|does not exist|schema cache|42P01|PGRST205/i.test(m+code)) tip=' → Tables are missing. Run the SQL setup (button below) in Supabase → SQL Editor.';
+    else if(/row-level|permission denied|42501/i.test(m+code)) tip=' → RLS policies are missing. Run the SQL setup (button below).';
+    else if(/failed to fetch|network|load failed/i.test(m)) tip=' → Cannot reach the project URL. Check the URL, your internet, or whether the project is paused.';
+    el.className='hint';el.style.color='var(--danger)';el.textContent='Error: '+m+code+tip;
+  }
+  async function loadCloud(){
+    try{
+      if(!supabase) await initClient();
+      const [{data:members,error:me},{data:entries,error:ee}] = await Promise.all([
+        supabase.from('money_members').select('name').order('name'),
+        supabase.from('money_entries').select('id,name,date,type,amount,reason,created').order('date',{ascending:false})
+      ]);
+      if(me) throw me; if(ee) throw ee;
+      state.members=(members||[]).map(x=>x.name);
+      state.entries=(entries||[]).map(x=>({id:String(x.id),name:x.name,date:x.date,type:x.type,amount:Number(x.amount),reason:x.reason||'',created:Number(x.created||Date.now())}));
+      cloudReady=true; $('dbStatus').textContent='Supabase connected'; showDbError(null); $('offlineBar').classList.remove('show');
+      try{localStorage.setItem('ms-cache',JSON.stringify(state))}catch(e){}
+      render();
+    }catch(err){
+      console.error(err); cloudReady=false; $('dbStatus').textContent='Supabase offline'; showDbError(err);
+      try{const c=JSON.parse(localStorage.getItem('ms-cache')||'null');if(c&&c.entries){state=c;$('offlineBar').classList.add('show');render();}}catch(e){}
+      toast('Cannot reach Supabase. Check internet, or run the SQL setup once.');
+    }
+  }
+ const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+ $('entryDate').value=today();
+ const money = n => 'Rs ' + Number(n||0).toLocaleString('en-LK',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const save = () => render();
+ function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').style.display='none',2600);}
+ function balance(name){return state.entries.filter(e=>e.name.toLowerCase()===name.toLowerCase()).reduce((s,e)=>s+(e.type==='given'?1:-1)*Number(e.amount),0);}
+ function totals(){return state.entries.reduce((a,e)=>{a[e.type]+=Number(e.amount);return a;},{given:0,received:0});}
+ function names(){return [...new Set([...state.members,...state.entries.map(e=>e.name)])].sort((a,b)=>a.localeCompare(b));}
+ function render(){
+  const t=totals(), total=t.given-t.received;
+  $('grandTotal').textContent=money(total);$('givenTotal').textContent=money(t.given);$('receivedTotal').textContent=money(t.received);
+  const all=names();
+  $('memberOptions').innerHTML=all.map(n=>`<option value="${esc(n)}"></option>`).join('');
+  const previous=$('shareMember').value||'all';
+  $('shareMember').innerHTML='<option value="all">All members · total balance</option>'+all.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if([...$('shareMember').options].some(o=>o.value===previous))$('shareMember').value=previous;
+  $('memberCount').textContent=`${all.length} member${all.length===1?'':'s'}`;
+  $('memberList').className=all.length?'':'empty';
+  $('memberList').innerHTML=all.length?all.map(n=>{const b=balance(n);return `<div class="member-row"><div class="avatar">${esc(n.trim().slice(0,1).toUpperCase()||'?')}</div><div class="item-main"><strong>${esc(n)}</strong><small>${state.entries.filter(e=>e.name.toLowerCase()===n.toLowerCase()).length} transaction(s)</small></div><div class="money">${money(b)}</div></div>`}).join(''):'No members yet. Add a member or save a statement.';
+  const entries=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.created-a.created);
+  $('historyList').className=entries.length?'':'empty';
+  $('historyList').innerHTML=entries.length?entries.map(e=>`<div class="entry"><div class="avatar">${e.type==='given'?'↑':'↓'}</div><div class="item-main"><strong>${esc(e.name)}</strong><small>${esc(e.date)} · ${e.type==='given'?'Money given':'Money received'}${e.reason?' · '+esc(e.reason):''}</small></div><div class="entry-side"><div class="money">${e.type==='given'?'+':'−'}${money(e.amount)}</div><button class="mini" data-delete="${esc(e.id)}" type="button">Delete</button></div></div>`).join(''):'No transactions saved yet.';
+ }
+ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b===btn));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.tab));}));
+ $('todayBtn').addEventListener('click',()=>$('entryDate').value=today());
+ function updateReasonField(){const received=$('entryType').value==='received';$('reasonField').style.display=received?'none':'block';if(received)$('reason').value='';}
+ $('entryType').addEventListener('change',updateReasonField);updateReasonField();
+  $('entryForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const name=$('memberName').value.trim(), amount=Number($('amount').value), date=$('entryDate').value;
+    const type=$('entryType').value, reason=$('reason').value.trim();
+    if(!name||!date||!Number.isFinite(amount)||amount<=0)return toast('Please enter a name, date, and valid amount.');
+    if(!cloudReady)return toast('Supabase is not connected.');
+    const sbtn=e.submitter||$('entryForm').querySelector('[type=submit]'); sbtn.disabled=true;
+    try{
+      if(!state.members.some(n=>n.toLowerCase()===name.toLowerCase())){
+        const {error}=await supabase.from('money_members').insert({name});
+        if(error && error.code!=='23505') throw error;
+      }
+      const {error}=await supabase.from('money_entries').insert({id:crypto.randomUUID(),name,date,type,amount,reason,created:Date.now()});
+      if(error) throw error;
+      await loadCloud(); $('amount').value=''; $('reason').value=''; toast('Statement saved to Supabase.');
+    }catch(err){console.error(err);toast('Could not save to Supabase. Check RLS/table setup.');}
+    finally{sbtn.disabled=false;}
+  });
+  $('memberForm').addEventListener('submit',async e=>{
+    e.preventDefault(); const n=$('newMember').value.trim();
+    if(!n)return;
+    if(names().some(x=>x.toLowerCase()===n.toLowerCase()))return toast('That member already exists.');
+    if(!cloudReady)return toast('Supabase is not connected.');
+    try{
+      const {error}=await supabase.from('money_members').insert({name:n});
+      if(error) throw error;
+      $('newMember').value=''; await loadCloud(); toast('Member added to Supabase.');
+    }catch(err){console.error(err);toast('Could not add member. Check RLS/table setup.');}
+  });
+  $('historyList').addEventListener('click',async e=>{
+    const b=e.target.closest('[data-delete]'); if(!b)return;
+    if(!confirm('Delete this transaction?'))return;
+    if(!cloudReady)return toast('Supabase is not connected.');
+    try{
+      const {error}=await supabase.from('money_entries').delete().eq('id',b.dataset.delete);
+      if(error) throw error;
+      await loadCloud(); toast('Transaction deleted.');
+    }catch(err){console.error(err);toast('Could not delete transaction.');}
+  });
+ function setTheme(dark){document.body.classList.toggle('dark',dark);$('themeBtn').textContent=dark?'☀ Light':'☾ Dark';try{localStorage.setItem('ms-dark',dark?'1':'0')}catch(e){}}
+ try{setTheme(localStorage.getItem('ms-dark')==='1')}catch(e){}
+ $('themeBtn').addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudReady)loadCloud();});
+ function drawStatement(){
+  const canvas=$('shareCanvas'),ctx=canvas.getContext('2d'),selected=$('shareMember').value,all=names(),isAll=selected==='all',list=isAll?all:[selected],rows=list.map(n=>({name:n,balance:balance(n),count:state.entries.filter(e=>e.name.toLowerCase()===n.toLowerCase()).length}));
+  const width=900,pad=58;let height=360+rows.length*90;if(!isAll){const es=state.entries.filter(e=>e.name.toLowerCase()===selected.toLowerCase()).sort((a,b)=>a.date.localeCompare(b.date));height+=es.length*64+60;}height=Math.max(760,Math.min(height,5000));canvas.width=width;canvas.height=height;
+  ctx.fillStyle='#f3f7f3';ctx.fillRect(0,0,width,height);ctx.fillStyle='#102d24';ctx.fillRect(0,0,width,245);
+  ctx.fillStyle='#bdebd6';ctx.font='700 22px system-ui';ctx.fillText('MONEY STATEMENT',pad,62);ctx.fillStyle='#ffffff';ctx.font='800 42px system-ui';wrapText(ctx,isAll?'All members balance':selected,pad,125,width-pad*2,50);ctx.fillStyle='#c8ded3';ctx.font='20px system-ui';ctx.fillText('Generated '+today(),pad,205);
+  const total=rows.reduce((s,r)=>s+r.balance,0);let y=295;ctx.fillStyle='#61776d';ctx.font='600 18px system-ui';ctx.fillText(isAll?'TOTAL OUTSTANDING':'MEMBER BALANCE',pad,y);ctx.fillStyle='#176b52';ctx.font='800 44px system-ui';ctx.fillText(money(total),pad,y+58);y+=105;
+  ctx.fillStyle='#ffffff';roundRect(ctx,pad,y,width-pad*2,rows.length*90+24,22);y+=28;
+  rows.forEach(r=>{ctx.fillStyle='#176b52';ctx.beginPath();ctx.arc(pad+27,y+19,18,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 17px system-ui';ctx.fillText(r.name.trim().slice(0,1).toUpperCase(),pad+21,y+25);ctx.fillStyle='#172b26';ctx.font='700 23px system-ui';ctx.fillText(r.name,pad+60,y+16);ctx.fillStyle='#718178';ctx.font='16px system-ui';ctx.fillText(`${r.count} transaction(s)`,pad+60,y+42);ctx.fillStyle='#176b52';ctx.font='700 23px system-ui';ctx.textAlign='right';ctx.fillText(money(r.balance),width-pad-22,y+26);ctx.textAlign='left';y+=90;});
+  y+=30;
+  if(!isAll){ctx.fillStyle='#172b26';ctx.font='700 24px system-ui';ctx.fillText('TRANSACTIONS',pad,y);y+=25;const es=state.entries.filter(e=>e.name.toLowerCase()===selected.toLowerCase()).sort((a,b)=>b.date.localeCompare(a.date));if(!es.length){ctx.fillStyle='#718178';ctx.font='18px system-ui';ctx.fillText('No transactions recorded.',pad,y+25);y+=60;}es.forEach(e=>{ctx.fillStyle='#172b26';ctx.font='600 18px system-ui';ctx.fillText(e.date+' · '+(e.type==='given'?'Given':'Received'),pad,y+23);ctx.fillStyle='#718178';ctx.font='16px system-ui';wrapText(ctx,e.reason||'No reason added',pad,y+48,width-pad*2-220,22);ctx.fillStyle=e.type==='given'?'#176b52':'#a33b3b';ctx.font='700 19px system-ui';ctx.textAlign='right';ctx.fillText((e.type==='given'?'+':'−')+money(e.amount),width-pad,y+26);ctx.textAlign='left';y+=64;});}
+  ctx.fillStyle='#8a9b91';ctx.font='16px system-ui';ctx.fillText('Made with Money Statement',pad,height-28);
+ }
+ function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fill();}
+ function wrapText(ctx,text,x,y,maxWidth,lineHeight){let words=String(text).split(' '),line='';for(const word of words){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){ctx.fillText(line,x,y);line=word;y+=lineHeight;}else line=test;}if(line)ctx.fillText(line,x,y);}
+ function openPreview(){drawStatement();$('shareModal').classList.add('open');}
+ $('previewBtn').addEventListener('click',openPreview);$('closeModal').addEventListener('click',()=>$('shareModal').classList.remove('open'));$('shareModal').addEventListener('click',e=>{if(e.target===$('shareModal'))$('shareModal').classList.remove('open');});
+ function canvasBlob(){return new Promise(resolve=>$('shareCanvas').toBlob(resolve,'image/png'));}
+ async function shareImage(){drawStatement();const blob=await canvasBlob();if(!blob)return toast('Could not create image.');const file=new File([blob],'money-statement.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){try{await navigator.share({files:[file],title:'Money Statement',text:'Money statement and member balances'});}catch(e){if(e.name!=='AbortError')toast('Sharing was not available. You can save the photo instead.');}}else{openPreview();toast('Tap Save photo to download, then share it from your phone.');}}
+ $('shareBtn').addEventListener('click',shareImage);$('modalShareBtn').addEventListener('click',shareImage);
+ $('downloadBtn').addEventListener('click',()=>{drawStatement();const a=document.createElement('a');a.download='money-statement.png';a.href=$('shareCanvas').toDataURL('image/png');a.click();toast('Photo saved or download started.');});
+ $('exportBtn').addEventListener('click',()=>{const rows=[['Date','Member','Type','Amount','Reason'],...state.entries.map(e=>[e.date,e.name,e.type,e.amount,e.reason])];const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='money-statement.csv';a.click();URL.revokeObjectURL(url);});
+ $('refreshBtn').addEventListener('click',async()=>{const b=$('refreshBtn');b.classList.add('spin');await loadCloud();b.classList.remove('spin');if(cloudReady)toast('Up to date.');});
+ window.addEventListener('online',loadCloud);
+ if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+ render();
+
+ (function(){const c=getCfg();$('sbUrl').value=c.url;$('sbKey').value=c.key;})();
+ $('sbSave').addEventListener('click',async()=>{
+  const url=$('sbUrl').value.trim(),key=$('sbKey').value.trim();
+  if(!/^https:\/\/.+/.test(url)||key.length<20)return toast('Enter the project URL and the anon key.');
+  try{localStorage.setItem('ms-sb-config',JSON.stringify({url,key}));}catch(e){}
+  supabase=null; $('dbStatus').textContent='Supabase connecting…'; await loadCloud();
+  if(cloudReady)toast('Connected to Supabase.');
+ });
+ $('sbSql').addEventListener('click',async()=>{
+  const m=document.documentElement.outerHTML.match(/SUPABASE SQL SETUP\n-+\n([\s\S]*?)\n-->/);
+  const sql=m?m[1]:'';
+  try{await navigator.clipboard.writeText(sql);toast('SQL copied. Paste it in Supabase → SQL Editor → Run.');}
+  catch(e){prompt('Copy this SQL:',sql);}
+ });
+ loadCloud();
+})();
+</script>
+</body>
+</html>
